@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KAA ChatHub - Login</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0d47a1, #1976d2);
+      color: white;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      margin: 0;
+    }
+    #container {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 30px;
+      border-radius: 10px;
+      width: 320px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 20px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+    }
+    label {
+      display: block;
+      text-align: left;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      border: none;
+      font-size: 1rem;
+    }
+    button {
+      background-color: #1565c0;
+      border: none;
+      padding: 12px 20px;
+      font-size: 1.1rem;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #1e88e5;
+    }
+    #message {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: #ffbaba;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h2 id="formTitle">Loading...</h2>
+
+    <form id="loginForm">
+      <div id="nameField">
+        <label for="displayName">Display Name</label>
+        <input type="text" id="displayName" name="displayName" required placeholder="Your name" />
+      </div>
+
+      <div id="roomField" style="display:none;">
+        <label for="roomCode">Room Code</label>
+        <input type="text" id="roomCode" name="roomCode" placeholder="Enter room code" />
+      </div>
+
+      <button type="submit" id="submitBtn">Submit</button>
+    </form>
+
+    <div id="message"></div>
+  </div>
+
+<script>
+  // Change this to your Google Apps Script Web App URL that handles room creation and joining
+  const ROOM_API_URL = "https://script.google.com/macros/s/AKfycbzrBFJLsnv9Wc9yiblt4RoGrgExiKjyCY91lsxcSdgItvL5lzZskClGmbjIexRVveHcgQ/exec";
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const action = urlParams.get('action'); // "create" or "join"
+
+  const formTitle = document.getElementById('formTitle');
+  const roomField = document.getElementById('roomField');
+  const loginForm = document.getElementById('loginForm');
+  const messageDiv = document.getElementById('message');
+
+  // On load, adjust form based on action
+  if (action === "create") {
+    formTitle.textContent = "Create a New Room";
+    roomField.style.display = "none"; // no room code input when creating
+  } else if (action === "join") {
+    formTitle.textContent = "Join a Room";
+    roomField.style.display = "block";
+    document.getElementById('roomCode').setAttribute('required', 'required');
+  } else {
+    formTitle.textContent = "Invalid Action";
+    loginForm.style.display = "none";
+    messageDiv.textContent = "Please use the links to create or join a room.";
+  }
+
+  // Utility to generate room code, example: KAA + 4 random uppercase letters/digits
+  function generateRoomCode() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "KAA";
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    messageDiv.textContent = "";
+
+    const displayName = document.getElementById('displayName').value.trim();
+    let roomCode = "";
+
+    if (!displayName) {
+      messageDiv.textContent = "Please enter your display name.";
+      return;
+    }
+
+    if (action === "create") {
+      roomCode = generateRoomCode();
+
+      // POST to backend to create room
+      try {
+        const res = await fetch(ROOM_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "createRoom",
+            room: roomCode,
+            name: displayName,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        if (!res.ok) throw new Error("Failed to create room");
+
+        // Optionally you can parse res.json() here for confirmation
+        sessionStorage.setItem("room", roomCode);
+        sessionStorage.setItem("name", displayName);
+
+        window.location.href = `chat.html?room=${roomCode}`;
+      } catch (err) {
+        messageDiv.textContent = "Error creating room. Please try again.";
+        console.error(err);
+      }
+    } else if (action === "join") {
+      roomCode = document.getElementById('roomCode').value.trim().toUpperCase();
+      if (!roomCode) {
+        messageDiv.textContent = "Please enter a room code.";
+        return;
+      }
+
+      // Optional: validate room exists by calling backend
+      try {
+        const res = await fetch(`${ROOM_API_URL}?action=checkRoom&room=${roomCode}`);
+        if (!res.ok) throw new Error("Room not found");
+        const data = await res.json();
+        if (!data.exists) {
+          messageDiv.textContent = "Room code not found.";
+          return;
+        }
+
+        sessionStorage.setItem("room", roomCode);
+        sessionStorage.setItem("name", displayName);
+
+        window.location.href = `chat.html?room=${roomCode}`;
+      } catch (err) {
+        messageDiv.textContent = "Room code not found.";
+        console.error(err);
+      }
+    }
+  });
+</script>
+</body>
+</html>

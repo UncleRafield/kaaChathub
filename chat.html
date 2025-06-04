@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KAA ChatHub - Room Chat</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1976d2;
+      color: white;
+      margin: 0; padding: 20px;
+      display: flex; flex-direction: column; height: 100vh;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      background: #1565c0;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      margin-bottom: 15px;
+    }
+    .msg {
+      margin-bottom: 12px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    .msg .name {
+      font-weight: bold;
+      color: #ffeb3b;
+    }
+    .msg .time {
+      font-size: 0.8em;
+      color: #bbdefb;
+      margin-left: 6px;
+    }
+    form {
+      display: flex;
+      gap: 10px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: none;
+      outline: none;
+    }
+    button {
+      background: #ffeb3b;
+      border: none;
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #fdd835;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>KAA ChatHub — Room Chat</h2>
+
+  <div id="messages">Loading chat...</div>
+
+  <form id="messageForm">
+    <input id="messageInput" type="text" placeholder="Type your message here..." autocomplete="off" required />
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    // Your Google Apps Script web app URL (deployed)
+    const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxFo_c-BpQTXI3K8CSKeghvNiWnK61t1VxUAaToPFBvRN-c8j7Q85shUcbp7z3HBK8YrA/exec';
+
+    // Get room code and username from sessionStorage
+    const roomCode = sessionStorage.getItem('room');
+    const displayName = sessionStorage.getItem('name');
+
+    // If missing, redirect back to login
+    if (!roomCode || !displayName) {
+      alert('Missing room or username. Please login again.');
+      window.location.href = 'login.html';
+    }
+
+    const messagesDiv = document.getElementById('messages');
+    const form = document.getElementById('messageForm');
+    const input = document.getElementById('messageInput');
+
+    // Function to fetch messages from backend filtered by room
+    async function fetchMessages() {
+      try {
+        const response = await fetch(`${GOOGLE_SHEETS_URL}?action=getMessages&room=${encodeURIComponent(roomCode)}`);
+        const data = await response.json();
+
+        messagesDiv.innerHTML = '';
+        if (data.length === 0) {
+          messagesDiv.innerHTML = '<p>No messages yet. Start the conversation!</p>';
+          return;
+        }
+
+        data.forEach(msg => {
+          const div = document.createElement('div');
+          div.classList.add('msg');
+          div.innerHTML = `
+            <span class="name">${escapeHTML(msg.name)}</span>: 
+            <span class="text">${escapeHTML(msg.message)}</span>
+            <span class="time">(${new Date(msg.timestamp).toLocaleTimeString()})</span>
+          `;
+          messagesDiv.appendChild(div);
+        });
+
+        // Scroll to bottom
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+        messagesDiv.innerHTML = '<p style="color:#ffcccc;">Failed to load messages.</p>';
+      }
+    }
+
+    // Escape HTML to prevent injection
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, function(m) {
+        return ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        })[m];
+      });
+    }
+
+    // Submit new message to backend
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+
+      const payload = {
+        action: 'postMessage',
+        room: roomCode,
+        name: displayName,
+        message: message,
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        await fetch(GOOGLE_SHEETS_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        input.value = '';
+        fetchMessages();
+      } catch (error) {
+        alert('Failed to send message.');
+        console.error('Send message error:', error);
+      }
+    });
+
+    // Initial load
+    fetchMessages();
+
+    // Refresh chat every 3 seconds
+    setInterval(fetchMessages, 3000);
+  </script>
+</body>
+</html>
